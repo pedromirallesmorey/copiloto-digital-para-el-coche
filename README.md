@@ -164,3 +164,125 @@ Cambiar device_tracker.sm_a536b, por tu tracker móvil.
 - La fórmula es suficiente para trayectos urbanos y seguimiento cada pocos minutos.
 - Evitas funciones incompatibles (sin, cos, radians, etc.).
 
+## 🧩 Paso 4 – Módulo de Protección de Kilómetros
+
+Esto mantendrá los datos confiables, detectará errores y permitirá restaurarlos automáticamente. Evita pérdidas o caídas de kilometraje.
+
+### 4.1 Sensor de validación visual
+
+Detecta si el valor actual es sospechoso (como 0.0) y muestra un estado claro en el panel.
+
+```
+- platform: template
+  sensors:
+    kia_kilometros_estado:
+      friendly_name: Estado de kilómetros
+      unique_id: kia_kilometros_estado
+      value_template: >
+        {% set km = states('input_number.kia_kilometros_actuales') | float(0) %}
+        {% if km == 0 %}
+          Sin datos válidos
+        {% else %}
+          {{ km }} km
+        {% endif %}
+      icon_template: >
+        {% if states('input_number.kia_kilometros_actuales') | float(0) == 0 %}
+          mdi:alert
+        {% else %}
+          mdi:shield-check
+        {% endif %}
+```
+
+### 4.2 Automatización para respaldo automático
+
+Esa automatización está diseñada para crear un respaldo (una copia de seguridad) del valor actual de los kilómetros del coche cada vez que cambian, siempre que el nuevo valor sea mayor que cero.
+
+🔍 ¿Qué hace cada parte?
+
+Elemento => Función
+trigger => Se activa cuando cambian los kilómetros (kia_kilometros_actuales).
+condition => Sólo continúa si el nuevo valor es mayor a 0.
+action => Copia el valor actual a kia_kilometros_respaldo (la entidad respaldo).
+
+🧩 ¿Por qué es útil?
+
+- Protege tu dato clave de kilometraje si Home Assistant se reinicia o si por error el valor se pone en cero.
+- Puedes usar kia_kilometros_respaldo en un script de restauración, por ejemplo, si detectas que kia_kilometros_actuales se ha reiniciado.
+- También sirve para comprobar cambios de kilometraje, sin necesidad de registro externo.
+
+```
+automation:
+  - alias: "Actualizar respaldo de kilómetros"
+    trigger:
+      - platform: state
+        entity_id: input_number.kia_kilometros_actuales
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.state | float(0) > 0 }}"
+    action:
+      - service: input_number.set_value
+        data:
+          entity_id: input_number.kia_kilometros_respaldo
+          value: "{{ states('input_number.kia_kilometros_actuales') }}"
+```
+
+### 4.3 Automatización de restauración en caso de error
+
+Detecta si el valor actual de los kilómetros se reinicia a 0 o a un número menor que el respaldo, y entonces los restaura automáticamente usando el respaldo guardado 🚗🔧:
+
+🧩 ¿Qué hace?
+
+- Disparador: Reacciona cada vez que cambia el valor de kia_kilometros_actuales.
+- Condición: Verifica si el nuevo valor es menor que el respaldo (incluyendo 0).
+- Acción: Restaura el valor correcto desde kia_kilometros_respaldo.
+
+```
+alias: Restaurar kilómetros desde respaldo
+triggers:
+  - entity_id: input_number.kia_kilometros_actuales
+    trigger: state
+conditions:
+  - condition: template
+    value_template: |
+      {{ states('input_number.kia_kilometros_actuales') | float(0) <
+          states('input_number.kia_kilometros_respaldo') | float(0) }}
+actions:
+  - data:
+      entity_id: input_number.kia_kilometros_actuales
+      value: "{{ states('input_number.kia_kilometros_respaldo') }}"
+    action: input_number.set_value
+  - action: telegram_bot.send_message
+    metadata: {}
+    data:
+      config_entry_id: 01JZ81RV8MR09SQ***********
+      message: >-
+        🚘 Se ha restaurado el valor de kilómetros desde el respaldo.          
+        Valor corregido: {{ states('input_number.kia_kilometros_respaldo') }}
+        km.
+```
+
+### 4.4 Dashboard visual para el panel
+
+Crea una tarjeta tipo vertical-stack para monitorizar los datos del módulo:
+
+```
+type: vertical-stack
+cards:
+  - type: entities
+    title: 🚘 Protección de Kilómetros - Kia Rio
+    entities:
+      - entity: input_number.kia_kilometros_actuales
+        name: Kilómetros actuales
+        icon: mdi:car-speedometer
+      - entity: input_number.kia_kilometros_respaldo
+        name: Kilómetros respaldo
+        icon: mdi:backup-restore
+      - entity: sensor.kia_kilometros_estado
+        name: Estado del sensor
+        icon: mdi:shield-check
+```
+
+
+
+
+
