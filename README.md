@@ -282,6 +282,84 @@ cards:
         icon: mdi:shield-check
 ```
 
+## 🧩 Paso 5 – Automatizaciones principales
+
+🔹 automations.yaml:
+
+📍 Al conectar al coche
+```
+automation:
+  - alias: Kia ubicación al conectar coche
+    description: ""
+    triggers:
+      - entity_id: binary_sensor.movil_pedro_coche
+        to: "on"
+        trigger: state
+    actions:
+      - action: script.kia_guardar_ubicacion_aprox
+        data: {}
+```
+
+📍 Al desconectar del coche
+```
+  - alias: Kia ubicación al desconectar coche
+    description: ""
+    triggers:
+      - entity_id: binary_sensor.movil_pedro_coche
+        to: "off"
+        trigger: state
+    actions:
+      - action: script.kia_guardar_ubicacion_aprox
+        data: {}
+```
+
+📍 Cada 5 minutos conectado
+🧠 Tiempo de registro
+
+Elegir entre registrar la ubicación cada 5 minutos o siempre depende de lo que busques optimizar: batería, datos, precisión, o contexto.
+Para mi caso, donde el objetivo es monitorizar el coche cuando estoy conectado, la opción cada 5 minutos mientras estés en el coche es perfecta.
+
+Vamos a comparar:
+
+🕒 Registrar cada 5 minutos
+Ventajas:
+- 🔋 Menor consumo de batería, especialmente en móviles.
+- 🧠 Ideal para trayectos en coche, donde los cambios de ubicación suelen ser más significativos.
+- 📁 Menos datos almacenados → base histórica más ligera.
+- 
+Ideal para:
+- Seguimiento de trayectos.
+- Automatizaciones activas solo durante viajes.
+- Menor impacto en rendimiento del sistema.
+
+♾️ Registrar siempre
+Ventajas:
+- 📍 Máxima precisión en el historial.
+- 📊 Permite analizar trayectos a pie, cambios breves de ubicación o patrones de movimiento.
+- 🛡️ Útil en escenarios de seguridad o emergencia.
+- 
+Desventajas:
+- 🔋 Mayor consumo de batería en móviles.
+- 🧠 Puede generar muchos datos innecesarios si el usuario está en casa o sin moverse.
+- ⚙️ Mayor carga para Home Assistant si se usa constantemente.
+
+Registro cada 5 min conectado:
+
+```
+automation:
+  - alias: Kia registro cada 5 minutos conectado
+    description: ""
+    triggers:
+      - minutes: /5
+        trigger: time_pattern
+    conditions:
+      - condition: state
+        entity_id: binary_sensor.movil_pedro_coche
+        state: "on"
+    actions:
+      - action: script.kia_guardar_ubicacion_aprox
+        data: {}
+```
 
 
 
