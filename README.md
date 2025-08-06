@@ -691,11 +691,120 @@ action:
   - service: script.kia_registrar_mantenimiento_completo
 ```
 
+## 🧩 Paso 11 – Estado técnico del vehículo
 
+Sensor que muestra un estado legible que diga "Sin datos" cuando el valor sea 0:
 
+```
+sensor:
+  - platform: template
+    sensors:
+      estado_valor_kilometros:
+        friendly_name: "Estado del valor de kilómetros"
+        unique_id: estado_valor_kilometros
+        value_template: >
+          {% set km = states('input_number.kia_kilometros_actuales') | float(0) %}
+          {% if km == 0 %}
+            Sin datos
+          {% else %}
+            {{ km }} km
+          {% endif %}
+        icon_template: mdi:speedometer
+```
+¿Qué hace?
 
+Si el valor de kilómetros es 0, muestra “Sin datos”.
+Si tiene un valor mayor que 0, lo muestra con el sufijo “km”.
 
+## 🧩 Paso 12 – Implementar sistema avanzado de mantenimiento
 
+### 📌 Paso 12.1: Registro de Fechas Clave
+
+¿Qué hace?
+Permite llevar control de eventos importantes como la próxima ITV, vencimiento del seguro y última fecha de cambio de aceite.
+¿Cómo se implementa?
+Se crean entidades input_datetime para cada fecha. No tienen hora, solo fecha. Agrega estas secciones a configuration.yaml (o donde declares tus helpers):
+
+🎯 12.1.1: Fechas importantes (input_datetime)
+```
+input_datetime:
+  kia_proxima_itv:
+    name: Kia próxima ITV
+    has_date: true
+    has_time: false
+
+  kia_fecha_seguro:
+    name: Kia vencimiento del seguro
+    has_date: true
+    has_time: false
+
+  mantenimiento_fecha:
+    name: Fecha de mantenimiento
+    has_date: true
+    has_time: false
+```
+
+### 🛞 12.1.2: Estado kilométrico (input_number)
+
+¿Qué hace?
+Actualiza los kilómetros actuales del coche automáticamente cuando se guarda la ubicación o el recorrido.
+
+¿Cómo se implementa?
+Puedes usar un script.kia_actualizar_kilometros que copie el valor de kia_kilometros_recorridos al campo real:
+
+```
+script:
+  kia_actualizar_kilometros:
+    alias: Kia actualizar kilómetros actuales
+    sequence:
+      - service: input_number.set_value
+        data:
+          entity_id: input_number.kia_kilometros_actuales
+          value: "{{ states('input_number.kia_kilometros_recorridos') | float }}"
+```
+
+### 📌 Paso 12.2: Script para Registrar Mantenimiento
+
+¿Qué hace?
+Guarda la fecha, km y detalles de cada mantenimiento realizado en un campo.
+
+¿Cómo se implementa?
+Se usa un script que se puede activar desde el panel:
+
+Asegúrate de tener estos helpers:
+```
+input_text:
+  mantenimiento_actual:
+    name: Historial de mantenimientos
+    initial: ""
+  detalle_mantenimiento:
+    name: Detalle del mantenimiento
+    initial: ""
+  ciudad_mantenimiento:
+    name: Ciudad del último mantenimiento
+    initial: ""
+```
+
+Script para registrar el mantenimiento:
+```
+script:
+  registrar_mantenimiento:
+    alias: Registrar mantenimiento completo
+    sequence:
+      - service: input_text.set_value
+        data:
+          entity_id: input_text.mantenimiento_actual
+          value: >
+            Último mantenimiento: {{ now().strftime('%d-%m-%Y %H:%M') }}
+            Km: {{ states('input_number.kia_kilometros_actuales') }}
+            Ciudad: {{ state_attr('device_tracker.sm_a536b', 'geocoded_location') }}
+            Detalles: {{ states('input_text.detalle_mantenimiento') }}
+      - service: input_text.set_value
+        data:
+          entity_id: input_text.ciudad_mantenimiento
+          value: "{{ state_attr('device_tracker.sm_a536b', 'geocoded_location') }}"
+```
+Puedes disparar este script desde un botón en el dashboard o tras registrar detalles manualmente.
 
 
 
