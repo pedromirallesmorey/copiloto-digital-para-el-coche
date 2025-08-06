@@ -361,6 +361,73 @@ automation:
         data: {}
 ```
 
+## 🧩 Paso 6 – Sensor de coche parado
+
+### 🧠 ¿Cómo detectar una parada?
+
+Podemos considerar “parada” cuando:
+El móvil está conectado al Bluetooth del coche.
+La ubicación no ha cambiado significativamente en los últimos X minutos (por ejemplo, menos de 30 metros en 3 minutos).
+Vamos a crear un sensor que detecte si hubo movimiento. Este sensor calcula la distancia recorrida desde la última ubicación guardada. Si es menor a 30 metros, se considera “parado”.
+
+```
+sensor:
+  - platform: template
+    sensors:
+      kia_coche_parado:
+        friendly_name: "Kia coche parado"
+        unique_id: kia_coche_parado
+        icon_template: mdi:car-brake-hold
+        value_template: >
+          {% set lat1 = states('input_text.kia_ultima_latitud') | float(0) %}
+          {% set lon1 = states('input_text.kia_ultima_longitud') | float(0) %}
+          {% set lat2 = state_attr('device_tracker.sm_a536b', 'latitude') | float(0) %}
+          {% set lon2 = state_attr('device_tracker.sm_a536b', 'longitude') | float(0) %}
+          {% set r = 6371000 %}
+          {% set dlat = ((lat2 - lat1) * 3.1416 / 180) %}
+          {% set dlon = ((lon2 - lon1) * 3.1416 / 180) %}
+          {% set lat1_rad = lat1 * 3.1416 / 180 %}
+          {% set lat2_rad = lat2 * 3.1416 / 180 %}
+          {% set a = (dlat / 2)**2 + cos(lat1_rad) * cos(lat2_rad) * (dlon / 2)**2 %}
+          {% set c = 2 * (a + 1) ** 0.5 - 2 %}
+          {% set distancia = r * c %}
+          {{ 'si' if distancia < 30 else 'no' }}
+
+```
+
+📍 Solo registrar si está detenido
+
+```
+automation:
+  - alias: "Kia registrar si está parado"
+    trigger:
+      - platform: time_pattern
+        minutes: "/5"
+    condition:
+      - condition: state
+        entity_id: binary_sensor.movil_pedro_coche_nombre
+        state: "on"
+      - condition: state
+        entity_id: sensor.kia_coche_parado
+        state: "si"
+    action:
+      - service: script.kia_guardar_ubicacion_aprox
+```
+
+Registra ubicación solo si estás conectado al coche y este no se mueve, lo cual ahorra batería, datos y mejora la calidad del historial. 🤖🗺️
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
