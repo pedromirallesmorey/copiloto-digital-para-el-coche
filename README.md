@@ -88,6 +88,10 @@ input_text:
     name: Detalle del mantenimiento
     initial: ""
 
+  kia_mantenimiento_actual:
+    name: Kia detalles de mantenimiento
+    initial: "Sin mantenimiento registrado"
+
 input_number:
   kia_kilometros_recorridos:
     name: Kia kilómetros recorridos
@@ -529,6 +533,165 @@ automation:
           message: >
             Aparcado fuera de zona conocida. Ubicación: [Ver en mapa](https://maps.google.com/?q={{ state_attr('device_tracker.sm_a536b', 'latitude') }},{{ state_attr('device_tracker.sm_a536b', 'longitude') }})
 ```
+
+## 🧩 Paso 9 – Activar “Modo Coche” con ambiente
+
+Este modo se activa automáticamente cuando tu móvil se conecta al Bluetooth del coche. Puedes añadir tantas acciones como desees: luces, música, cambiar el estado de presencia, etc.
+
+### 🎵 Automatización del “Modo Coche”
+
+```
+automation:
+  - alias: "Kia activar modo coche"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.movil_pedro_coche_nombre
+        to: "on"
+    action:
+      - service: notify.mobile_app_sm_a536b
+        data:
+          title: "🚗 Modo Coche Activado"
+          message: "¡Modo coche activado!"
+      # Ejemplo: enciende la luz del salón
+      - service: light.turn_on
+        target:
+          entity_id: light.salon
+      # Ejemplo: inicia música en Spotify
+      - service: media_player.play_media
+        target:
+          entity_id: media_player.spotify_pedro
+        data:
+          media_content_id: "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"
+          media_content_type: "music"
+      # Aquí puedes añadir más acciones, como abrir el garaje, cambiar estado de presencia, etc.
+```
+Cambia las entidades por las tuyas: light.salon, media_player.spotify_pedro, etc.
+
+💡 Consejo: Puedes añadir más servicios como activar el panel del coche, abrir el garaje, etc.
+
+## 🧩 Paso 10 – Registro de mantenimiento e historial
+
+### Script para guardar eventos de mantenimiento
+```
+script:
+  kia_registrar_mantenimiento_completo:
+    alias: Kia registrar mantenimiento completo
+    sequence:
+      - variables:
+          nuevo_registro: >
+            {{ now().strftime('%d-%m-%Y %H:%M') }} | Km: {{ states('input_number.kia_kilometros_actuales') }} | {{ states('input_text.kia_detalle_mantenimiento') }}
+      - service: input_text.set_value
+        data:
+          entity_id: input_text.kia_mantenimiento_actual
+          value: >
+            {{ nuevo_registro }}{{ '\n' }}{{ states('input_text.kia_mantenimiento_actual') }}
+```
+### 🧩 ¿Qué hace?
+- 📅 Fecha y hora: la del momento en que se registra.
+- 🔢 Kilómetros actuales: del coche, al momento del registro.
+- 📝 Detalles del mantenimiento: escritos por ti antes de ejecutar el script.
+- 📚 Historial acumulado: cada registro se añade al principio del texto, manteniendo todo lo anterior.
+
+### Automatización para lanzar el script tras confirmar el mantenimiento
+
+Automatización para lanzar el script de registro de mantenimiento cuando confirmas un nuevo mantenimiento (por ejemplo, al cambiar el valor de input_text.kia_detalle_mantenimiento).
+Se asume que confirmas el mantenimiento introduciendo un texto en el campo (puedes adaptarlo si usas un botón o helper diferente):
+
+```
+automation:
+  - alias: "Kia - Guardar nuevo evento de mantenimiento"
+    trigger:
+      - platform: state
+        entity_id: input_text.kia_detalle_mantenimiento
+        to: ~  # Detecta cualquier cambio de valor
+    condition:
+      - condition: template
+        value_template: "{{ states('input_text.kia_detalle_mantenimiento') | length > 3 }}"
+    action:
+      - service: script.kia_registrar_mantenimiento_completo
+      # (Opcional) Limpia el campo tras registrar el mantenimiento
+      - service: input_text.set_value
+        data:
+          entity_id: input_text.kia_detalle_mantenimiento
+          value: ""
+```
+
+### Script para registrar un nuevo evento de mantenimiento en el historial de tu coche
+
+El script script.kia_registrar_mantenimiento_completo es el encargado de registrar un nuevo evento de mantenimiento en el historial de tu coche, combinando la fecha, los kilómetros actuales y la descripción del mantenimiento que introduzcas.
+
+```
+kia_registrar_mantenimiento_completo:
+  alias: Kia registrar mantenimiento completo
+  sequence:
+    - variables:
+        nuevo_registro: >
+          {{ now().strftime('%d-%m-%Y %H:%M') }} | Km: {{ states('input_number.kia_kilometros_actuales') }} | {{ states('input_text.kia_detalle_mantenimiento') }}
+    - service: input_text.set_value
+      data:
+        entity_id: input_text.kia_mantenimiento_actual
+        value: >
+          {{ nuevo_registro }}{{ '\n' }}{{ states('input_text.kia_mantenimiento_actual') }}
+```
+¿Qué hace este script?
+Crea una cadena con la fecha/hora actual, los kilómetros actuales y la descripción del mantenimiento (introducida previamente).
+Añade ese registro al principio del historial (input_text.kia_mantenimiento_actual), manteniendo los registros anteriores debajo.
+El resultado: El historial muestra los mantenimientos más recientes primero.
+
+Requisitos
+Debes tener estos helpers creados (puedes hacerlo desde la UI o en YAML):
+
+```
+input_text:
+  kia_mantenimiento_actual:
+    name: Kia detalles de mantenimiento
+    initial: "Sin mantenimiento registrado"
+  kia_detalle_mantenimiento:
+    name: Kia registrar nuevo mantenimiento
+    initial: ""
+input_number:
+  kia_kilometros_actuales:
+    name: Kilómetros actuales
+    initial: 0
+    min: 0
+    max: 1000000
+```
+
+Para lanzar el script kia_registrar_mantenimiento_completo desde una automatización en Home Assistant, solo necesitas una acción que llame al servicio script.kia_registrar_mantenimiento_completo.
+
+```
+automation:
+  - alias: "Kia - Guardar nuevo evento de mantenimiento"
+    trigger:
+      - platform: state
+        entity_id: input_text.kia_detalle_mantenimiento
+        to: ~  # Se dispara al cambiar el texto
+    condition:
+      - condition: template
+        value_template: "{{ states('input_text.kia_detalle_mantenimiento') | length > 3 }}"
+    action:
+      - service: script.kia_registrar_mantenimiento_completo
+      - service: input_text.set_value
+        data:
+          entity_id: input_text.kia_detalle_mantenimiento
+          value: ""
+```
+
+Explicación:
+
+Trigger: Cuando cambias el valor del campo de detalle de mantenimiento.
+- Condition: Solo si el texto tiene más de 3 caracteres (puedes ajustar este filtro).
+- Action:
+  - Llama al script kia_registrar_mantenimiento_completo.
+  - Opcionalmente, borra el campo de texto para dejarlo listo para el siguiente mantenimiento.
+  - 
+Puedes lanzar el script desde cualquier automatización usando la acción:
+```
+action:
+  - service: script.kia_registrar_mantenimiento_completo
+```
+
+
 
 
 
