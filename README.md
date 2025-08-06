@@ -787,28 +787,52 @@ input_text:
 
 Script para registrar el mantenimiento:
 ```
-script:
-  registrar_mantenimiento:
-    alias: Registrar mantenimiento completo
-    sequence:
-      - service: input_text.set_value
-        data:
-          entity_id: input_text.mantenimiento_actual
-          value: >
-            Último mantenimiento: {{ now().strftime('%d-%m-%Y %H:%M') }}
-            Km: {{ states('input_number.kia_kilometros_actuales') }}
-            Ciudad: {{ state_attr('device_tracker.sm_a536b', 'geocoded_location') }}
-            Detalles: {{ states('input_text.detalle_mantenimiento') }}
-      - service: input_text.set_value
-        data:
-          entity_id: input_text.ciudad_mantenimiento
-          value: "{{ state_attr('device_tracker.sm_a536b', 'geocoded_location') }}"
+sequence:
+  - variables:
+      nuevo_registro: >
+        {{ now().strftime('%d-%m-%Y %H:%M') }} | Km: {{
+        states('input_number.kia_kilometros_actuales') }} | {{
+        states('input_text.kia_detalle_mantenimiento') }}
+  - data:
+      entity_id: input_text.kia_mantenimiento_actual
+      value: >
+        {{ nuevo_registro }}{{ '\n' }}{{
+        states('input_text.kia_mantenimiento_actual') }}
+    action: input_text.set_value
+alias: Kia registrar mantenimiento completo
+description: ""
 ```
 Puedes disparar este script desde un botón en el dashboard o tras registrar detalles manualmente.
 
+### 📌 Paso 12.4: Gráfico de Kilómetros
 
+¿Qué hace?
+Muestra cómo han evolucionado los km del coche en los últimos días/meses.
 
+¿Cómo se implementa?
+Activar el recorder en configuration.yaml
 
+En tu configuration.yaml, añade (o modifica) el bloque recorder: para incluir solo la entidad de kilómetros:
+```
+recorder:
+  include:
+    entities:
+      - input_number.kia_kilometros_actuales
+```
+Después de guardar este cambio, reinicia Home Assistant para que el recorder empiece a almacenar datos de input_number.kia_kilometros_actuales.
+
+Añadir la tarjeta de estadísticas en Lovelace:
+Puedes editar tu dashboard vía la interfaz visual (“Editar panel” → “Añadir tarjeta” → 
+“Código”) o directamente en ui-lovelace.yaml. Incluye este bloque:
+
+```
+type: statistics-graph
+title: "Evolución de kilómetros"
+entities:
+  - entity: input_number.kia_kilometros_actuales
+days_to_show: 30
+chart_type: line
+```
 
 
 
