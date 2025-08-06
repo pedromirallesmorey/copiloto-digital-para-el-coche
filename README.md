@@ -416,6 +416,122 @@ automation:
 
 Registra ubicación solo si estás conectado al coche y este no se mueve, lo cual ahorra batería, datos y mejora la calidad del historial. 🤖🗺️
 
+## 🧩 Paso 7 – Alerta por parada prolongada
+
+Vamos a añadir una función extra para que tu sistema te avise si el coche está detenido demasiado tiempo. Esto puede servir como indicador de aparcamiento, tiempo en ralentí, o incluso situaciones inusuales.
+
+### ⏳ Sensor de parada prolongada
+
+Primero, vamos a crear un sensor de duración desde la última vez que se detectó movimiento:
+
+```
+sensor:
+  - platform: template
+    sensors:
+      kia_tiempo_coche_parado:
+        friendly_name: "Kia tiempo coche parado"
+        unique_id: kia_tiempo_coche_parado
+        value_template: >
+          {{ (as_timestamp(now()) - as_timestamp(states.binary_sensor.movil_pedro_coche_nombre.last_changed)) | int }}
+        unit_of_measurement: "s"
+        icon_template: mdi:car-brake-alert
+```
+
+Este sensor mide cuántos segundos han pasado desde el último cambio de estado (por ejemplo, desde que el coche se detuvo).
+
+### 🚨 Automatización: alerta por parada prolongada
+
+Ahora podemos lanzar una alerta si el coche está conectado y lleva más de X minutos detenido (ej. 10 minutos = 600 segundos):
+
+```
+  - alias: "Kia alerta parada larga"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.kia_tiempo_coche_parado
+        above: 600
+    condition:
+      - condition: state
+        entity_id: binary_sensor.movil_pedro_coche_nombre
+        state: 'on'
+    action:
+      - service: notify.mobile_app_mi_movil
+        data:
+          title: "🚗 Coche detenido"
+          message: "Más de 10 minutos parado en {{ states.device_tracker.sm_a536b.state }}"
+```
+
+🔔 Esta alerta puede ir a tu móvil, Telegram o incluso encender una luz si estás en casa.
+
+## 🧩 Paso 8 – Zonas de aparcamiento y alerta
+
+Puedes crear zonas en Home Assistant directamente en el mapa o en tu archivo zones.yaml o dentro del configuration.yaml. Por ejemplo:
+
+```
+zone:
+  - name: Casa
+    latitude: 39.6100
+    longitude: 2.7000
+    radius: 30
+    icon: mdi:home
+
+  - name: Trabajo
+    latitude: 39.5850
+    longitude: 2.6760
+    radius: 30
+    icon: mdi:office-building
+```
+Ajusta las coordenadas a tus ubicaciones reales. El radius define el área (en metros).
+
+Si ya tienes tus zonas creadas en el mapa usando la interfaz de Home Assistant (la UI), entonces no necesitas declararlas manualmente en zones.yaml o configuration.yaml — ya están integradas como entidades del tipo zone. y se gestionan automáticamente.
+
+Sensor:
+Tu móvil ya está actuando como rastreador del coche. Puedes usar el atributo state del device_tracker.mi_movil para saber si está dentro de alguna zona:
+
+### 📍 Sensor de zona actual
+```
+- platform: template
+  sensors:
+    kia_zona_coche_actual:
+      friendly_name: "Kia zona coche actual"
+      unique_id: kia_zona_coche_actual
+      value_template: "{{ states('device_tracker.sm_a536b') }}"
+      icon_template: "mdi:map-marker"
+```
+Esto mostrará directamente "Casa", "Trabajo", o "not_home" si está fuera de cualquier zona definida.
+
+### 📍 Alerta si aparcas fuera de zona
+
+Vamos a lanzar una notificación si aparcas en un lugar fuera de las zonas conocidas:
+
+```
+automation:
+  - alias: "Kia alerta aparcamiento no reconocido"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.movil_pedro_coche_nombre
+        to: "off"
+    condition:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: device_tracker.sm_a536b
+            state: "home"
+          - condition: state
+            entity_id: device_tracker.sm_a536b
+            state: "gsaib"
+      - condition: state
+        entity_id: sensor.kia_coche_parado
+        state: "si"
+    action:
+      - service: notify.mobile_app_sm_a536b
+        data:
+          title: "🚗 Aparcado fuera de zona"
+          message: >
+            Aparcado fuera de zona conocida. Ubicación: [Ver en mapa](https://maps.google.com/?q={{ state_attr('device_tracker.sm_a536b', 'latitude') }},{{ state_attr('device_tracker.sm_a536b', 'longitude') }})
+```
+
+
+
 
 
 
