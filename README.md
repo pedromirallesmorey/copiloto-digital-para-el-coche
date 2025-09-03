@@ -137,12 +137,18 @@ sequence:
       lon2: "{{ state_attr('device_tracker.sm_a536b', 'longitude') | float }}"
       delta_lat: "{{ lat2 - lat1 }}"
       delta_lon: "{{ lon2 - lon1 }}"
+      # Factores ajustados para España (lat ~40°)
+      factor_lat: 111.32  # km por grado de latitud
+      factor_lon: 85.39   # km por grado de longitud en España
   - service: input_number.set_value
     data:
       entity_id: input_number.kia_kilometros_recorridos
       value: >
-        {% set distancia_aprox = ((delta_lat * 111)**2 + (delta_lon * 85)**2)**0.5 %}
-        {{ (states('input_number.kia_kilometros_recorridos') | float + distancia_aprox) | round(2) }}
+        {% set delta_lat = lat2 - lat1 %}
+        {% set delta_lon = lon2 - lon1 %}
+        {% set distancia = ((delta_lat * factor_lat)**2 + (delta_lon * factor_lon)**2)**0.5 %}
+        {% set nueva_distancia = states('input_number.kia_kilometros_recorridos') | float + distancia %}
+        {{ nueva_distancia | round(2) if distancia > 0.01 else states('input_number.kia_kilometros_recorridos') | float }}
   - service: input_text.set_value
     target:
       entity_id: input_text.kia_ultima_latitud
